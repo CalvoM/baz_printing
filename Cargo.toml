@@ -1,0 +1,11 @@
+[package]
+name = "baz_printing_lpdp"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "client"
+path = "src/bin/client.rs"
+
+[dependencies]
+dotenvy = { git = "https://github.com/allan2/dotenvy", features = ["macros"] }
