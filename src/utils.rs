@@ -30,7 +30,7 @@ pub enum DaemonCommand {
     RemoveJobs = 0x05,
 }
 
-pub enum RecieveJobSubCommand {
+pub enum ReceiveJobSubCommand {
     //+----+----+
     //| 01 | LF |
     //+----+----+
