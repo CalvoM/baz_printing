@@ -111,7 +111,26 @@ impl LPDPClient {
         let data = self.read_printer_data_until(0x00)?;
         Ok(data)
     }
-    pub fn request_job_removal() {}
+    pub fn request_job_removal(&mut self) -> Result<(), LPDPClientError> {
+        let username =
+            whoami::username().map_err(|e| LPDPClientError::SystemDetailsError(e.to_string()))?;
+        let job_cmd: Vec<u8> = [
+            &[DaemonCommand::RemoveJobs as u8][..],
+            self.queue_name.as_bytes(),
+            b" ",
+            username.as_bytes(),
+            b" ",
+            "001".as_bytes(),
+            b"\n",
+        ]
+        .concat();
+        self.stream
+            .write_all(&job_cmd)
+            .map_err(|e| LPDPClientError::FailedWrite(e.to_string()))?;
+        let data = self.read_printer_data_until(0x00)?;
+        println!("=> {data}");
+        Ok(())
+    }
     fn send_printer_abort_job(&mut self) -> Result<(), LPDPClientError> {
         let job_cmd: Vec<u8> = [&[ReceiveJobSubCommand::Abort as u8][..], b"\n"].concat();
         self.stream
