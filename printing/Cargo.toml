@@ -1,0 +1,11 @@
+[package]
+name = "printing"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+clap = { version = "4.6.1", features = ["derive"] }
+dotenvy = { git = "https://github.com/allan2/dotenvy", features = ["macros"] }
+thiserror = "2.0.18"
+whoami = "2.1.2"

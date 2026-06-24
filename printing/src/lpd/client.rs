@@ -3,8 +3,8 @@ use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::time::Duration;
 
-use crate::errors::LPDPClientError::{self};
-use crate::utils::{DaemonCommand, ReceiveJobSubCommand};
+use crate::lpd::errors::LPDPClientError::{self};
+use crate::lpd::utils::{DaemonCommand, ReceiveJobSubCommand};
 
 pub struct LPDPClient {
     pub queue_name: String,
@@ -77,14 +77,26 @@ impl LPDPClient {
         self.send_printer_abort_job()?;
         Ok(())
     }
-    pub fn request_queue_start_short(&mut self) -> Result<String, LPDPClientError> {
-        let username =
+    pub fn request_queue_start_short(
+        &mut self,
+        username: Option<String>,
+        job_number: Option<String>,
+    ) -> Result<String, LPDPClientError> {
+        let default_username =
             whoami::username().map_err(|e| LPDPClientError::SystemDetailsError(e.to_string()))?;
+        let username = username.unwrap_or(default_username);
+
+        let args: String;
+        if let Some(arg) = job_number {
+            args = arg;
+        } else {
+            args = username;
+        };
         let job_cmd: Vec<u8> = [
             &[DaemonCommand::SendQueueStateJobShort as u8][..],
             self.queue_name.as_bytes(),
             b" ",
-            username.as_bytes(),
+            args.as_bytes(),
             b"\n",
         ]
         .concat();
@@ -94,14 +106,25 @@ impl LPDPClient {
         let data = self.read_printer_data_until(0x00)?;
         Ok(data)
     }
-    pub fn request_queue_start_long(&mut self) -> Result<String, LPDPClientError> {
-        let username =
+    pub fn request_queue_start_long(
+        &mut self,
+        username: Option<String>,
+        job_number: Option<String>,
+    ) -> Result<String, LPDPClientError> {
+        let default_username =
             whoami::username().map_err(|e| LPDPClientError::SystemDetailsError(e.to_string()))?;
+        let username = username.unwrap_or(default_username);
+        let args: String;
+        if let Some(arg) = job_number {
+            args = arg;
+        } else {
+            args = username;
+        };
         let job_cmd: Vec<u8> = [
             &[DaemonCommand::SendQueueStateJobLong as u8][..],
             self.queue_name.as_bytes(),
             b" ",
-            username.as_bytes(),
+            args.as_bytes(),
             b"\n",
         ]
         .concat();
@@ -111,14 +134,25 @@ impl LPDPClient {
         let data = self.read_printer_data_until(0x00)?;
         Ok(data)
     }
-    pub fn request_job_removal(&mut self) -> Result<(), LPDPClientError> {
-        let username =
+    pub fn request_job_removal(
+        &mut self,
+        username: Option<String>,
+        job_number: Option<String>,
+    ) -> Result<(), LPDPClientError> {
+        let default_username =
             whoami::username().map_err(|e| LPDPClientError::SystemDetailsError(e.to_string()))?;
+        let username = username.unwrap_or(default_username);
+        let args: String;
+        if let Some(arg) = job_number {
+            args = arg;
+        } else {
+            args = username;
+        };
         let job_cmd: Vec<u8> = [
             &[DaemonCommand::RemoveJobs as u8][..],
             self.queue_name.as_bytes(),
             b" ",
-            username.as_bytes(),
+            args.as_bytes(),
             b" ",
             "001".as_bytes(),
             b"\n",
@@ -239,9 +273,9 @@ impl LPDPClient {
     fn read_printer_data_until(&mut self, delimiter: u8) -> Result<String, LPDPClientError> {
         let mut reader = BufReader::new(&self.stream);
         let mut buffer = Vec::new();
-        let bytes_read = reader
+        let _bytes_read = reader
             .read_until(delimiter, &mut buffer)
             .map_err(|e| LPDPClientError::FailedRead(e.to_string()))?;
-        Ok(String::from_utf8(buffer).map_err(|e| LPDPClientError::FailedRead(e.to_string()))?)
+        String::from_utf8(buffer).map_err(|e| LPDPClientError::FailedRead(e.to_string()))
     }
 }
