@@ -40,17 +40,19 @@
 pub const SUPPORTED_VERSION: u16 = 0x0101; // 1.1
 
 #[repr(C)]
+#[derive(serde::Serialize)]
 pub struct IPPOperationRequest {
-    Version: u16,
-    OperationID: u16,
-    RequestID: u32,
+    pub version: u16,
+    pub operation_id: u16,
+    pub request_id: u32,
 }
 
 #[repr(C)]
+#[derive(serde::Serialize)]
 pub struct IPPOperationResponse {
-    Version: u16,
-    StatusCode: u16,
-    RequestID: u32,
+    pub version: u16,
+    pub status_code: u16,
+    pub request_id: u32,
 }
 
 //Each "attribute-group" field is encoded as follows:
@@ -242,6 +244,7 @@ pub enum JobOperations {
     RestartJob,
 }
 
+#[repr(u16)]
 pub enum OperationID {
     PrintJob = 0x0002,
     PrintURI = 0x0003,
