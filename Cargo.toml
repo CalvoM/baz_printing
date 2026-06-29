@@ -1,3 +1,3 @@
 [workspace]
 resolver = "3"
-members = ["lpd_client","printing", "desktop/src-tauri"]
+members = ["lpd_client","printing", "desktop/src-tauri", "ipp_client"]
