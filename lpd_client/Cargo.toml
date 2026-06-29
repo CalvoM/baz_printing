@@ -3,6 +3,10 @@ name = "lpd_client"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "lpd_client"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.6.1", features = ["derive"] }
 dotenvy = { git = "https://github.com/allan2/dotenvy", features = ["macros"] }
