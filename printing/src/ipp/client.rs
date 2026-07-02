@@ -73,7 +73,7 @@ impl IPPClient {
     pub fn get_printer_attributes(&mut self) -> Result<(), IPPClientError> {
         let operation_id = OperationID::GetPrinterAttributes as u16;
         let base_data = IPPOperationRequestBase {
-            version: 0x0101,
+            version: 0x0200,
             operation_id,
             request_id: 0x00000002,
         };
