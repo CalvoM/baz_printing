@@ -4,7 +4,7 @@ use printing::ipp::{client::IPPClient, errors::IPPClientError};
 #[derive(Parser)]
 #[command(name = "ipp_client")]
 #[command(version = "1.0")]
-#[command(about="LPD (Line Printer Daemon) client, communicates with LPD server", long_about = None)]
+#[command(about="IPP (Internet Printing Protocol) client, communicates with IPP server", long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
     #[arg(long, short = 'H')]

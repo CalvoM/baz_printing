@@ -7,8 +7,9 @@ use reqwest::{
 use crate::ipp::{
     errors::IPPClientError,
     utils::{
-        pack_attribute_with_one_value, pack_byte_ipp, AttributeGroupTags, IPPOperationRequestBase,
-        NetworkPackable, OperationID, ValueTags,
+        pack_attribute_with_one_value, pack_byte_ipp, pack_u16_to_u32, pack_u8_to_u16,
+        AttributeGroupTags, IPPOperationRequestBase, NetworkPackable, OperationID, RequestID,
+        ResponseStatusCode, ValueTags, IPP_CONTENT_TYPE, SUPPORTED_VERSION,
     },
 };
 
@@ -41,7 +42,7 @@ impl IPPClient {
         let mut headers = header::HeaderMap::new();
         headers.insert(
             CONTENT_TYPE,
-            "application/ipp"
+            IPP_CONTENT_TYPE
                 .parse()
                 .map_err(|e: InvalidHeaderValue| IPPClientError::SetupError(e.to_string()))?,
         );
@@ -53,10 +54,11 @@ impl IPPClient {
     }
     pub fn send_print_job(&mut self) -> Result<(), IPPClientError> {
         let operation_id = OperationID::PrintJob as u16;
+        let request_id = RequestID::PrintJob as u32;
         let base_data = IPPOperationRequestBase {
-            version: 0x0101,
+            version: SUPPORTED_VERSION,
             operation_id,
-            request_id: 0x00000001,
+            request_id,
         };
         let data = SendPrintJobRequest { base: base_data };
         let mut expected_data = data.to_bytes()?;
@@ -72,10 +74,11 @@ impl IPPClient {
     /// This is a `required` operation.
     pub fn get_printer_attributes(&mut self) -> Result<(), IPPClientError> {
         let operation_id = OperationID::GetPrinterAttributes as u16;
+        let request_id = RequestID::GetPrinterAttributes as u32;
         let base_data = IPPOperationRequestBase {
-            version: 0x0200,
+            version: SUPPORTED_VERSION,
             operation_id,
-            request_id: 0x00000002,
+            request_id,
         };
         let data = GetPrinterAttributesRequest { base: base_data };
         let mut expected_data = data.to_bytes()?;
@@ -99,7 +102,10 @@ impl IPPClient {
         // last_byte
         let end_tag = AttributeGroupTags::EndOfAttributesTag as u8;
         expected_data.push(end_tag);
-        let printer_attributes_bytes = self.send_bytes_to_from_printer(expected_data)?;
+        let response = self.send_bytes_to_from_printer(expected_data)?;
+        let printer_attributes_bytes = self.parse_response(response, SUPPORTED_VERSION, request_id);
+        println!("{:#?}", printer_attributes_bytes);
+
         Ok(())
     }
     pub fn get_jobs(&self) {}
@@ -126,6 +132,42 @@ impl IPPClient {
             .map_err(|e| IPPClientError::TransportError(e.to_string()))?
             .to_vec();
         Ok(res_bytes)
+    }
+
+    fn parse_response(
+        &mut self,
+        response: Vec<u8>,
+        expected_version_number: u16,
+        expected_request_id: u32,
+    ) -> Vec<u8> {
+        let version_number = pack_u8_to_u16(response[0], response[1]);
+        if version_number != expected_version_number {
+            panic!(
+                "Versions numbers do not match: Received {:X}, Expected {:X}",
+                version_number, expected_version_number
+            );
+        }
+        let status_code = pack_u8_to_u16(response[2], response[3]);
+        let ok_code = ResponseStatusCode::SuccessfulOk as u16;
+        if status_code != ok_code {
+            match ResponseStatusCode::try_from(status_code) {
+                Ok(status) => panic!("We did not receive Ok StatusCode, we received: {}", status),
+                Err(code) => panic!(
+                    "We did not receive Ok StatusCode, we received unknown code: {:X}",
+                    code
+                ),
+            }
+        }
+        let upper_request_id = pack_u8_to_u16(response[4], response[5]);
+        let lower_request_id = pack_u8_to_u16(response[6], response[7]);
+        let request_id = pack_u16_to_u32(upper_request_id, lower_request_id);
+        if request_id != expected_request_id {
+            panic!(
+                "We did not receive the expected request ID, we received: {:X}",
+                request_id
+            );
+        }
+        response[8..response.len()].to_vec()
     }
     fn parse_ipp_url(raw_url: &str) -> Result<Url, IPPClientError> {
         if raw_url.len() > 1023 {

@@ -39,7 +39,8 @@
 
 use crate::ipp::errors::IPPClientError;
 
-pub const SUPPORTED_VERSION: u16 = 0x0101; // 1.1
+pub const SUPPORTED_VERSION: u16 = 0x0301; // 1.1
+pub const IPP_CONTENT_TYPE: &str = "application/ipp";
 
 #[repr(C)]
 #[derive(rkyv::Serialize, rkyv::Deserialize, rkyv::Archive)]
@@ -319,4 +320,261 @@ pub enum OperationID {
     PausePrinter = 0x0010,
     ResumePrinter = 0x0011,
     PurgeJobs = 0x0012,
+}
+
+// Status-code values range from 0x0000 to 0x7fff, divided into classes:
+//   successful     0x0000 - 0x00ff
+//   informational  0x0100 - 0x01ff (none defined by RFC 8011)
+//   redirection    0x0300 - 0x03ff (none defined by RFC 8011)
+//   client-error   0x0400 - 0x04ff
+//   server-error   0x0500 - 0x05ff
+// The top half of each class's range (0x0n80-0x0nff, n = 0..5) is reserved
+// for vendor use. Values 0x0600-0x7fff are reserved for future Standards
+// Track documents and MUST NOT be used.
+#[repr(u16)]
+pub enum ResponseStatusCode {
+    //The request has succeeded, and no request attributes were substituted
+    //or ignored.
+    SuccessfulOk = 0x0000,
+    //The request has succeeded, but some supplied (1) attributes were
+    //ignored or (2) unsupported values were substituted with supported
+    //values or were ignored in order to perform the operation without
+    //rejecting it.
+    SuccessfulOkIgnoredOrSubstituted = 0x0001,
+    //The request has succeeded, but some supplied attribute values
+    //conflicted with the values of other supplied attributes.  Either
+    //(1) these conflicting values were substituted with (supported) values
+    //or (2) the attributes were removed in order to process the Job
+    //without rejecting it.
+    SuccessfulOkConflictedAttributes = 0x0002,
+    //The request could not be understood by the IPP object due to
+    //malformed syntax (such as the value of a fixed-length attribute whose
+    //length does not match the prescribed length for that attribute
+    ClientErrorBadRequest = 0x0400,
+    //The IPP object understood the request but is refusing to fulfill it.
+    //Additional authentication information or authorization credentials
+    //will not help, and the request SHOULD NOT be repeated.
+    ClientErrorForbidden = 0x0401,
+    //The request requires user authentication.  The IPP Client can repeat
+    //the request with suitable authentication information.  If the request
+    //already included authentication information, then this status-code
+    //indicates that authorization has been refused for those credentials.
+    ClientErrorNotAuthenticated = 0x0402,
+    //The requester is not authorized to perform the request.  Additional
+    //authentication information or authorization credentials will not
+    //help, and the request SHOULD NOT be repeated.
+    ClientErrorNotAuthorized = 0x0403,
+    //The request is for something that cannot happen (e.g. canceling a
+    //Job that has already been canceled or aborted).
+    ClientErrorNotPossible = 0x0404,
+    //The Client did not produce a request within the time that the IPP
+    //object was prepared to wait.
+    ClientErrorTimeout = 0x0405,
+    //The IPP object has not found anything matching the request URI.  No
+    //indication is given of whether the condition is temporary or
+    //permanent.
+    ClientErrorNotFound = 0x0406,
+    //The requested object is no longer available, and no forwarding
+    //address is known.  This condition is considered permanent.
+    ClientErrorGone = 0x0407,
+    //The IPP object is refusing to process a request because the request
+    //entity is larger than the IPP object is willing or able to process.
+    ClientErrorRequestEntityTooLarge = 0x0408,
+    //The IPP object is refusing to service the request because one or
+    //more Client-supplied attributes have a variable-length value that is
+    //longer than the maximum length specified for that attribute.
+    ClientErrorRequestValueTooLong = 0x0409,
+    //The Document data is in a format, as specified in the
+    //"document-format" operation attribute, that is not supported by the
+    //Printer.
+    ClientErrorDocumentFormatNotSupported = 0x040a,
+    //In a Job Creation request with "ipp-attribute-fidelity" set to
+    //'true', the Printer does not support one or more attributes,
+    //attribute syntaxes, or attribute values supplied in the request.
+    ClientErrorAttributesOrValuesNotSupported = 0x040b,
+    //The scheme of the Client-supplied URI in a Print-URI or a Send-URI
+    //operation is not supported.
+    ClientErrorUriSchemeNotSupported = 0x040c,
+    //The IPP Printer does not support the charset supplied by the Client
+    //in the "attributes-charset" operation attribute.
+    ClientErrorCharsetNotSupported = 0x040d,
+    //The request is rejected because some attribute values conflicted
+    //with the values of other attributes that this document does not
+    //permit to be substituted or ignored.
+    ClientErrorConflictingAttributes = 0x040e,
+    //The Document data, as specified in the "compression" operation
+    //attribute, is compressed in a way that is not supported by the
+    //Printer.
+    ClientErrorCompressionNotSupported = 0x040f,
+    //The Document data cannot be decompressed using the algorithm
+    //specified by the "compression" operation attribute.
+    ClientErrorCompressionError = 0x0410,
+    //The Printer encountered an error in the Document data while
+    //interpreting it.
+    ClientErrorDocumentFormatError = 0x0411,
+    //The Printer encountered an access error while attempting to validate
+    //the accessibility of, or access to, the Document data specified in
+    //the "document-uri" operation attribute of a Print-URI or Send-URI
+    //request.
+    ClientErrorDocumentAccessError = 0x0412,
+    //The IPP object encountered an unexpected condition that prevented it
+    //from fulfilling the request.  Indicates that intervention by a
+    //knowledgeable human is probably required.
+    ServerErrorInternalError = 0x0500,
+    //The IPP object does not support the functionality required to
+    //fulfill the request, e.g. it does not recognize the operation.
+    ServerErrorOperationNotSupported = 0x0501,
+    //The IPP object is currently unable to handle the request due to
+    //temporary overloading or maintenance of the IPP object.
+    ServerErrorServiceUnavailable = 0x0502,
+    //The IPP object does not support or refuses to support the IPP
+    //version supplied as the "version-number" operation parameter.
+    ServerErrorVersionNotSupported = 0x0503,
+    //A Printer error, such as a paper jam, occurred while the IPP object
+    //processed a Print or Send operation.
+    ServerErrorDeviceError = 0x0504,
+    //A temporary error such as a buffer-full write error, a memory
+    //overflow, or a disk-full condition occurred while the IPP Printer
+    //processed an operation.
+    ServerErrorTemporaryError = 0x0505,
+    //The Printer is not currently accepting Jobs because the
+    //Administrator has set "printer-is-accepting-jobs" to 'false'.
+    ServerErrorNotAcceptingJobs = 0x0506,
+    //The Printer is too busy processing Jobs and/or other requests.
+    ServerErrorBusy = 0x0507,
+    //The Job has been canceled by an Operator or the system while the
+    //Client was transmitting the data to the IPP Printer.
+    ServerErrorJobCanceled = 0x0508,
+    //The IPP object does not support multiple Documents per Job, and a
+    //Client attempted to supply Document data with a second
+    //Send-Document or Send-URI operation.
+    ServerErrorMultipleDocumentJobsNotSupported = 0x0509,
+}
+
+impl std::convert::TryFrom<u16> for ResponseStatusCode {
+    type Error = u16;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            0x0000 => Ok(ResponseStatusCode::SuccessfulOk),
+            0x0001 => Ok(ResponseStatusCode::SuccessfulOkIgnoredOrSubstituted),
+            0x0002 => Ok(ResponseStatusCode::SuccessfulOkConflictedAttributes),
+            0x0400 => Ok(ResponseStatusCode::ClientErrorBadRequest),
+            0x0401 => Ok(ResponseStatusCode::ClientErrorForbidden),
+            0x0402 => Ok(ResponseStatusCode::ClientErrorNotAuthenticated),
+            0x0403 => Ok(ResponseStatusCode::ClientErrorNotAuthorized),
+            0x0404 => Ok(ResponseStatusCode::ClientErrorNotPossible),
+            0x0405 => Ok(ResponseStatusCode::ClientErrorTimeout),
+            0x0406 => Ok(ResponseStatusCode::ClientErrorNotFound),
+            0x0407 => Ok(ResponseStatusCode::ClientErrorGone),
+            0x0408 => Ok(ResponseStatusCode::ClientErrorRequestEntityTooLarge),
+            0x0409 => Ok(ResponseStatusCode::ClientErrorRequestValueTooLong),
+            0x040a => Ok(ResponseStatusCode::ClientErrorDocumentFormatNotSupported),
+            0x040b => Ok(ResponseStatusCode::ClientErrorAttributesOrValuesNotSupported),
+            0x040c => Ok(ResponseStatusCode::ClientErrorUriSchemeNotSupported),
+            0x040d => Ok(ResponseStatusCode::ClientErrorCharsetNotSupported),
+            0x040e => Ok(ResponseStatusCode::ClientErrorConflictingAttributes),
+            0x040f => Ok(ResponseStatusCode::ClientErrorCompressionNotSupported),
+            0x0410 => Ok(ResponseStatusCode::ClientErrorCompressionError),
+            0x0411 => Ok(ResponseStatusCode::ClientErrorDocumentFormatError),
+            0x0412 => Ok(ResponseStatusCode::ClientErrorDocumentAccessError),
+            0x0500 => Ok(ResponseStatusCode::ServerErrorInternalError),
+            0x0501 => Ok(ResponseStatusCode::ServerErrorOperationNotSupported),
+            0x0502 => Ok(ResponseStatusCode::ServerErrorServiceUnavailable),
+            0x0503 => Ok(ResponseStatusCode::ServerErrorVersionNotSupported),
+            0x0504 => Ok(ResponseStatusCode::ServerErrorDeviceError),
+            0x0505 => Ok(ResponseStatusCode::ServerErrorTemporaryError),
+            0x0506 => Ok(ResponseStatusCode::ServerErrorNotAcceptingJobs),
+            0x0507 => Ok(ResponseStatusCode::ServerErrorBusy),
+            0x0508 => Ok(ResponseStatusCode::ServerErrorJobCanceled),
+            0x0509 => Ok(ResponseStatusCode::ServerErrorMultipleDocumentJobsNotSupported),
+            other => Err(other),
+        }
+    }
+}
+
+impl std::fmt::Display for ResponseStatusCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let name = match self {
+            ResponseStatusCode::SuccessfulOk => "successful-ok",
+            ResponseStatusCode::SuccessfulOkIgnoredOrSubstituted => {
+                "successful-ok-ignored-or-substituted-attributes"
+            }
+            ResponseStatusCode::SuccessfulOkConflictedAttributes => {
+                "successful-ok-conflicting-attributes"
+            }
+            ResponseStatusCode::ClientErrorBadRequest => "client-error-bad-request",
+            ResponseStatusCode::ClientErrorForbidden => "client-error-forbidden",
+            ResponseStatusCode::ClientErrorNotAuthenticated => "client-error-not-authenticated",
+            ResponseStatusCode::ClientErrorNotAuthorized => "client-error-not-authorized",
+            ResponseStatusCode::ClientErrorNotPossible => "client-error-not-possible",
+            ResponseStatusCode::ClientErrorTimeout => "client-error-timeout",
+            ResponseStatusCode::ClientErrorNotFound => "client-error-not-found",
+            ResponseStatusCode::ClientErrorGone => "client-error-gone",
+            ResponseStatusCode::ClientErrorRequestEntityTooLarge => {
+                "client-error-request-entity-too-large"
+            }
+            ResponseStatusCode::ClientErrorRequestValueTooLong => {
+                "client-error-request-value-too-long"
+            }
+            ResponseStatusCode::ClientErrorDocumentFormatNotSupported => {
+                "client-error-document-format-not-supported"
+            }
+            ResponseStatusCode::ClientErrorAttributesOrValuesNotSupported => {
+                "client-error-attributes-or-values-not-supported"
+            }
+            ResponseStatusCode::ClientErrorUriSchemeNotSupported => {
+                "client-error-uri-scheme-not-supported"
+            }
+            ResponseStatusCode::ClientErrorCharsetNotSupported => {
+                "client-error-charset-not-supported"
+            }
+            ResponseStatusCode::ClientErrorConflictingAttributes => {
+                "client-error-conflicting-attributes"
+            }
+            ResponseStatusCode::ClientErrorCompressionNotSupported => {
+                "client-error-compression-not-supported"
+            }
+            ResponseStatusCode::ClientErrorCompressionError => "client-error-compression-error",
+            ResponseStatusCode::ClientErrorDocumentFormatError => {
+                "client-error-document-format-error"
+            }
+            ResponseStatusCode::ClientErrorDocumentAccessError => {
+                "client-error-document-access-error"
+            }
+            ResponseStatusCode::ServerErrorInternalError => "server-error-internal-error",
+            ResponseStatusCode::ServerErrorOperationNotSupported => {
+                "server-error-operation-not-supported"
+            }
+            ResponseStatusCode::ServerErrorServiceUnavailable => {
+                "server-error-service-unavailable"
+            }
+            ResponseStatusCode::ServerErrorVersionNotSupported => {
+                "server-error-version-not-supported"
+            }
+            ResponseStatusCode::ServerErrorDeviceError => "server-error-device-error",
+            ResponseStatusCode::ServerErrorTemporaryError => "server-error-temporary-error",
+            ResponseStatusCode::ServerErrorNotAcceptingJobs => "server-error-not-accepting-jobs",
+            ResponseStatusCode::ServerErrorBusy => "server-error-busy",
+            ResponseStatusCode::ServerErrorJobCanceled => "server-error-job-canceled",
+            ResponseStatusCode::ServerErrorMultipleDocumentJobsNotSupported => {
+                "server-error-multiple-document-jobs-not-supported"
+            }
+        };
+        write!(f, "{}", name)
+    }
+}
+
+#[repr(u32)]
+pub enum RequestID {
+    PrintJob = 0x00000001,
+    GetPrinterAttributes = 0x00000002,
+}
+
+pub fn pack_u16_to_u32(high: u16, low: u16) -> u32 {
+    ((high as u32) << 16) | (low as u32)
+}
+
+pub fn pack_u8_to_u16(high: u8, low: u8) -> u16 {
+    ((high as u16) << 8) | (low as u16)
 }
