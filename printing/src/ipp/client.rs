@@ -1,15 +1,17 @@
+use std::collections::VecDeque;
+
 use reqwest::{
-    blocking::Client,
-    header::{self, InvalidHeaderValue, CONTENT_TYPE},
     Url,
+    blocking::Client,
+    header::{self, CONTENT_TYPE, InvalidHeaderValue},
 };
 
 use crate::ipp::{
     errors::IPPClientError,
     utils::{
-        pack_attribute_with_one_value, pack_byte_ipp, pack_u16_to_u32, pack_u8_to_u16,
-        AttributeGroupTags, IPPOperationRequestBase, NetworkPackable, OperationID, RequestID,
-        ResponseStatusCode, ValueTags, IPP_CONTENT_TYPE, SUPPORTED_VERSION,
+        AttributeGroupTags, IPP_CONTENT_TYPE, IPPOperationRequestBase, NetworkPackable,
+        OperationID, RequestID, ResponseStatusCode, SUPPORTED_VERSION, ValueTags,
+        pack_attribute_with_one_value, pack_byte_ipp, pack_u8_to_u16, pack_u16_to_u32,
     },
 };
 
@@ -104,8 +106,11 @@ impl IPPClient {
         expected_data.push(end_tag);
         let response = self.send_bytes_to_from_printer(expected_data)?;
         let printer_attributes_bytes = self.parse_response(response, SUPPORTED_VERSION, request_id);
-        println!("{:#?}", printer_attributes_bytes);
-
+        // Expected attribute tags -
+        //     - Operation Attributes(2),
+        //     - Unsupported Attributes
+        //     - Printer Attributes
+        self.parse_attributes_tag(printer_attributes_bytes);
         Ok(())
     }
     pub fn get_jobs(&self) {}
@@ -163,11 +168,42 @@ impl IPPClient {
         let request_id = pack_u16_to_u32(upper_request_id, lower_request_id);
         if request_id != expected_request_id {
             panic!(
-                "We did not receive the expected request ID, we received: {:X}",
+                "We did not receive the expected request ID, we received: {:#04x}",
                 request_id
             );
         }
         response[8..response.len()].to_vec()
+    }
+    fn parse_attributes_tag(&mut self, attributes_data: Vec<u8>) -> Result<(), IPPClientError> {
+        let mut printer_attr_deque = VecDeque::from(attributes_data);
+        while let Some(byte) = printer_attr_deque.pop_front() {
+            if byte == (AttributeGroupTags::EndOfAttributesTag as u8) {
+                break;
+            }
+            let value_tag_byte = printer_attr_deque.pop_front().expect("Expected some bytes");
+            let tag_name_len = pack_u8_to_u16(
+                printer_attr_deque.pop_front().unwrap_or(0),
+                printer_attr_deque.pop_front().unwrap_or(0),
+            );
+            let tag_name_bytes = printer_attr_deque
+                .drain(0..(tag_name_len as usize))
+                .collect::<Vec<u8>>();
+            let tag_name = String::from_utf8(tag_name_bytes)
+                .map_err(|e| IPPClientError::GetPrinterAttributesError(e.to_string()))?;
+            let tag_value_len = pack_u8_to_u16(
+                printer_attr_deque.pop_front().unwrap_or(0),
+                printer_attr_deque.pop_front().unwrap_or(0),
+            );
+            let tag_value_bytes = printer_attr_deque
+                .drain(0..(tag_value_len as usize))
+                .collect::<Vec<u8>>();
+            let tag_value = String::from_utf8(tag_value_bytes)
+                .map_err(|e| IPPClientError::GetPrinterAttributesError(e.to_string()))?;
+            println!("{}", ValueTags::try_from(value_tag_byte).unwrap());
+            println!("{}", tag_name);
+            println!("{}", tag_value);
+        }
+        Ok(())
     }
     fn parse_ipp_url(raw_url: &str) -> Result<Url, IPPClientError> {
         if raw_url.len() > 1023 {

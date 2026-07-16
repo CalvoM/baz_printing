@@ -10,6 +10,8 @@ pub enum IPPClientError {
     ByteParsingError(String),
     #[error("{0}")]
     TransportError(String),
+    #[error("{0}")]
+    GetPrinterAttributesError(String),
 }
 
 impl serde::Serialize for IPPClientError {
