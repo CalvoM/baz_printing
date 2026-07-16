@@ -37,9 +37,11 @@
 //|                     data                    |   y bytes  - optional
 //-----------------------------------------------
 
+use std::u8;
+
 use crate::ipp::errors::IPPClientError;
 
-pub const SUPPORTED_VERSION: u16 = 0x0301; // 1.1
+pub const SUPPORTED_VERSION: u16 = 0x0101; // 1.1
 pub const IPP_CONTENT_TYPE: &str = "application/ipp";
 
 #[repr(C)]
@@ -63,15 +65,15 @@ pub struct IPPOperationResponseBase {
 pub trait NetworkPackable
 where
     Self: for<'a> rkyv::Serialize<
-        rkyv::rancor::Strategy<
-            rkyv::ser::Serializer<
-                rkyv::util::AlignedVec,
-                rkyv::ser::allocator::ArenaHandle<'a>,
-                rkyv::ser::sharing::Share,
+            rkyv::rancor::Strategy<
+                rkyv::ser::Serializer<
+                    rkyv::util::AlignedVec,
+                    rkyv::ser::allocator::ArenaHandle<'a>,
+                    rkyv::ser::sharing::Share,
+                >,
+                rkyv::rancor::Error,
             >,
-            rkyv::rancor::Error,
         >,
-    >,
 {
     fn to_bytes(&self) -> Result<Vec<u8>, IPPClientError>
     where
@@ -98,15 +100,15 @@ pub fn pack_attribute_with_one_value(value_tag: ValueTags, name: &str, value: &s
 pub fn pack_byte_ipp<S>(data: S) -> Result<Vec<u8>, IPPClientError>
 where
     S: for<'a> rkyv::Serialize<
-        rkyv::rancor::Strategy<
-            rkyv::ser::Serializer<
-                rkyv::util::AlignedVec,
-                rkyv::ser::allocator::ArenaHandle<'a>,
-                rkyv::ser::sharing::Share,
+            rkyv::rancor::Strategy<
+                rkyv::ser::Serializer<
+                    rkyv::util::AlignedVec,
+                    rkyv::ser::allocator::ArenaHandle<'a>,
+                    rkyv::ser::sharing::Share,
+                >,
+                rkyv::rancor::Error,
             >,
-            rkyv::rancor::Error,
         >,
-    >,
 {
     Ok(rkyv::to_bytes::<rkyv::rancor::Error>(&data)
         .map_err(|e| IPPClientError::SendPrintJobError(e.to_string()))?
@@ -134,6 +136,44 @@ pub enum AttributeGroupTags {
     PrinterAttributesTag = 0x04,
     UnsupportedAttributesTag = 0x05,
     FutureGroupTags = 0x06,
+}
+impl std::fmt::Display for AttributeGroupTags {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            AttributeGroupTags::OperationAttributesTag => {
+                write!(f, "operation-attributes-tag")
+            }
+            AttributeGroupTags::JobAttributesTag => {
+                write!(f, "job-attributes-tag")
+            }
+            AttributeGroupTags::EndOfAttributesTag => {
+                write!(f, "end-of-attributes-tag")
+            }
+            AttributeGroupTags::PrinterAttributesTag => {
+                write!(f, "printer-attributes-tag")
+            }
+            AttributeGroupTags::UnsupportedAttributesTag => {
+                write!(f, "unsupported-attributes-tag")
+            }
+            AttributeGroupTags::FutureGroupTags => {
+                write!(f, "future-group-tag")
+            }
+        }
+    }
+}
+impl std::convert::TryFrom<u8> for AttributeGroupTags {
+    type Error = &'static str;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x01 => Ok(AttributeGroupTags::OperationAttributesTag),
+            0x02 => Ok(AttributeGroupTags::JobAttributesTag),
+            0x03 => Ok(AttributeGroupTags::EndOfAttributesTag),
+            0x04 => Ok(AttributeGroupTags::PrinterAttributesTag),
+            0x05 => Ok(AttributeGroupTags::UnsupportedAttributesTag),
+            0x06 => Ok(AttributeGroupTags::FutureGroupTags),
+            0_u8 | 7_u8..=u8::MAX => Err("Unsupported tag."),
+        }
+    }
 }
 
 pub enum ModelDocumentGroupAttributeTag {
@@ -278,6 +318,92 @@ pub enum ValueTags {
     MemberAttrName = 0x4a,
     MoreUnassignedCharacterString = 0x4b,
     MoreUnassignedCharacterStringLimit = 0x4f,
+}
+
+impl std::convert::TryFrom<u8> for ValueTags {
+    type Error = &'static str;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            //out-of-band values
+            0x10 => Ok(ValueTags::Unsupported),
+            0x12 => Ok(ValueTags::Unknown),
+            0x13 => Ok(ValueTags::NoValue),
+            //integer values
+            0x20 => Ok(ValueTags::UnassignedInteger),
+            0x21 => Ok(ValueTags::Integer),
+            0x22 => Ok(ValueTags::Boolean),
+            0x23 => Ok(ValueTags::Enum),
+            0x24..=0x2f => Ok(ValueTags::MoreUnassignedInteger),
+            //Octet String
+            0x30 => Ok(ValueTags::OctetWithUnspecifiedFormat),
+            0x31 => Ok(ValueTags::Datetime),
+            0x32 => Ok(ValueTags::Resolution),
+            0x33 => Ok(ValueTags::RangeOfInteger),
+            0x34 => Ok(ValueTags::BeginCollection),
+            0x35 => Ok(ValueTags::TextWithLanguage),
+            0x36 => Ok(ValueTags::NameWithLanguage),
+            0x37 => Ok(ValueTags::EndCollection),
+            0x38..=0x3f => Ok(ValueTags::UnassignedOctetString),
+            //Character String
+            0x40 => Ok(ValueTags::UnassignedCharacterString),
+            0x41 => Ok(ValueTags::TextWithoutLanguage),
+            0x42 => Ok(ValueTags::NameWithoutLanguage),
+            0x43 => Ok(ValueTags::UnassignedCharacterString2),
+            0x44 => Ok(ValueTags::Keyword),
+            0x45 => Ok(ValueTags::URI),
+            0x46 => Ok(ValueTags::URIScheme),
+            0x47 => Ok(ValueTags::Charset),
+            0x48 => Ok(ValueTags::NaturalLanguage),
+            0x49 => Ok(ValueTags::MimeMediaType),
+            0x4a => Ok(ValueTags::MemberAttrName),
+            0x4b..=0x4f => Ok(ValueTags::MoreUnassignedCharacterString),
+            _ => Err("Unsupported value tag."),
+        }
+    }
+}
+
+impl std::fmt::Display for ValueTags {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let name = match self {
+            //out-of-band values
+            ValueTags::Unsupported => "unsupported",
+            ValueTags::Unknown => "unknown",
+            ValueTags::NoValue => "no-value",
+            //integer values
+            ValueTags::UnassignedInteger => "unassigned-integer",
+            ValueTags::Integer => "integer",
+            ValueTags::Boolean => "boolean",
+            ValueTags::Enum => "enum",
+            ValueTags::MoreUnassignedInteger => "unassigned-integer",
+            ValueTags::MoreUnassignedIntegerLimit => "unassigned-integer",
+            //Octet String
+            ValueTags::OctetWithUnspecifiedFormat => "octetString",
+            ValueTags::Datetime => "dateTime",
+            ValueTags::Resolution => "resolution",
+            ValueTags::RangeOfInteger => "rangeOfInteger",
+            ValueTags::BeginCollection => "begCollection",
+            ValueTags::TextWithLanguage => "textWithLanguage",
+            ValueTags::NameWithLanguage => "nameWithLanguage",
+            ValueTags::EndCollection => "endCollection",
+            ValueTags::UnassignedOctetString => "unassigned-octetString",
+            ValueTags::UnassignedOctetStringLimit => "unassigned-octetString",
+            //Character String
+            ValueTags::UnassignedCharacterString => "unassigned-character-string",
+            ValueTags::TextWithoutLanguage => "textWithoutLanguage",
+            ValueTags::NameWithoutLanguage => "nameWithoutLanguage",
+            ValueTags::UnassignedCharacterString2 => "unassigned-character-string",
+            ValueTags::Keyword => "keyword",
+            ValueTags::URI => "uri",
+            ValueTags::URIScheme => "uriScheme",
+            ValueTags::Charset => "charset",
+            ValueTags::NaturalLanguage => "naturalLanguage",
+            ValueTags::MimeMediaType => "mimeMediaType",
+            ValueTags::MemberAttrName => "memberAttrName",
+            ValueTags::MoreUnassignedCharacterString => "unassigned-character-string",
+            ValueTags::MoreUnassignedCharacterStringLimit => "unassigned-character-string",
+        };
+        write!(f, "{name}")
+    }
 }
 
 pub enum PrinterOperations {
@@ -546,9 +672,7 @@ impl std::fmt::Display for ResponseStatusCode {
             ResponseStatusCode::ServerErrorOperationNotSupported => {
                 "server-error-operation-not-supported"
             }
-            ResponseStatusCode::ServerErrorServiceUnavailable => {
-                "server-error-service-unavailable"
-            }
+            ResponseStatusCode::ServerErrorServiceUnavailable => "server-error-service-unavailable",
             ResponseStatusCode::ServerErrorVersionNotSupported => {
                 "server-error-version-not-supported"
             }
